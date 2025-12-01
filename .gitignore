@@ -1,0 +1,59 @@
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# Backup Files
+*.bak
+*.backup
+*~
+
+# Log Files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependencies (if you add npm/node later)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build Outputs (for future expansion)
+dist/
+build/
+*.min.js
+*.min.css
+
+# Temporary Files
+tmp/
+temp/
+*.tmp
+
+# Environment Files (if API keys added later)
+.env
+.env.local
+.env.*.local
+
+# Testing (for future expansion)
+coverage/
+.nyc_output/
+
+# Archive Files (unless specifically needed)
+*.zip
+*.tar.gz
+*.rar
