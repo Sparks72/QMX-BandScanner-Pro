@@ -2,6 +2,10 @@
 
 A sophisticated web-based band scanner for QMX transceivers using the Web Serial API. Features real-time spectrum analysis, waterfall displays, audio monitoring, and an interactive tuning dial.
 
+
+**🚀 [Live Demo](https://sparks72.github.io/QMX-BandScanner-Pro/) - Try it now in your browser!**
+
+A sophisticated web-based band scanner for QMX transceivers...
 ## Features
 
 ### Radio Control
