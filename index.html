@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -423,32 +425,55 @@
             font-size: 0.95em;
         }
 
-        /* --- VIZ --- */
-        .viz-container {
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            min-height: 300px;
-            position: relative;
-            background: #000;
-            border: 2px solid var(--border-color);
-            border-radius: 8px;
-            padding: 4px;
-            overflow: hidden;
-            box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
-        }
+      /* Add or modify these styles: */
 
-        canvas {
-            width: 100%;
-            flex-shrink: 0;
-            image-rendering: pixelated;
-        }
-        
-        #spectrumCanvas {
-            height: 140px;
-            background: #000;
-        }
+.viz-container {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0px !important;      /* Force it with !important */
+    min-height: 300px;
+    position: relative;
+    background: #000;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0px;              /* Remove all padding */
+    overflow: hidden;
+    box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
+}
+
+canvas {
+    width: 100%;
+    flex-shrink: 0;
+    image-rendering: pixelated;
+    display: block !important;  /* Force block display */
+    margin: 0 !important;       /* Force no margin */
+    padding: 0 !important;      /* Force no padding */
+    line-height: 0;             /* Remove line height gap */
+}
+
+#spectrumCanvas {
+    height: 80px;
+    background: #000;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+#waterfallCanvas {
+    flex-grow: 1;
+    min-height: 150px;
+    background: #000;
+    margin: 0 !important;       /* Force no margin */
+    padding: 0 !important;
+}
+
+#audioCanvas {
+    height: 35px;
+    background: #161b22;
+    margin-top: 0px !important; /* Was 4px - remove it */
+    border-radius: 4px;
+}
+     /*   }
         #waterfallCanvas {
             flex-grow: 1;
             min-height: 150px;
@@ -499,7 +524,7 @@
             opacity: 0.3;
             cursor: not-allowed;
         }
-    </style>
+		</style>
 </head>
 <body>
 
@@ -570,7 +595,7 @@
                 <label>Amateur Band</label>
                 <select id="bandSelect" data-title="Choose HF Amateur Radio Band">
                     <option value="1800000,2000000">160m (1.8-2.0 MHz)</option>
-					<!--<option value="5351500,5366500">60m (5.3515-5.3665 MHz)</option> -->
+					<option value="5351500,5366500">60m (5.3515-5.3665 MHz)</option>
                     <option value="3500000,4000000">80m (3.5-4.0 MHz)</option>
 					<option value="7000000,7300000" selected>40m (7.0-7.3 MHz)</option>
                     <option value="10100000,10150000">30m (10.1-10.15 MHz)</option>
@@ -582,7 +607,7 @@
 				<!--	<option value="050000,30000000">Gen (500khz-30.0 MHz)</option> -->
                 </select>
             </div>
-5351.5 – 5366.5
+
             <div class="control-group">
                 <label>Scan Resolution</label>
                 <select id="stepSelect" data-title="Frequency Step Between Scan Points">
@@ -686,6 +711,7 @@
     
 	
 	const CONFIG = { baudRate: 115200 };
+	const TUNING_STEP = 10;
     const state = {
         port: null, isConnected: false, isScanning: false, scanPaused: false, portBusy: false,
         currentVfoFreq: 14000000, currentMode: 2,
@@ -1129,7 +1155,11 @@ function initTuningKnob() {
     els.tuningKnob.addEventListener('mousedown', startTuningAdjust);
     els.tuningKnob.addEventListener('touchstart', startTuningAdjust, { passive: false });
     els.tuningKnob.addEventListener('wheel', handleTuningWheel);
-    els.tuningKnob.addEventListener('keydown', handleTuningKeyboard);
+    
+    // --- CHANGED THIS LINE --- 
+    // Listen globally on the document so we don't need to click the knob to focus it
+    document.addEventListener('keydown', handleTuningKeyboard); 
+    
     els.tuningKnob.addEventListener('mouseenter', enableTuningHoverKeys);
     els.tuningKnob.addEventListener('mouseleave', disableTuningHoverKeys);
 }
@@ -1200,25 +1230,36 @@ function continueTuningAdjust(e) {
         if (distance < rect.width * 2) {
             const currentAngle = Math.atan2(currentY - centerY, currentX - centerX);
             let deltaAngle = currentAngle - state.tuningLastAngle;
+            
+            // Handle wrapping from -PI to +PI
             if (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
             if (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
             
-            state.tuningKnobRotation += (deltaAngle * 180 / Math.PI);
+            // Convert radians to degrees
+            const degrees = deltaAngle * 180 / Math.PI;
+
+            // Update visuals
+            state.tuningKnobRotation += degrees;
             els.tuningKnob.style.transform = `rotate(${state.tuningKnobRotation}deg)`;
             
-            const freqDelta = (deltaAngle * 180 / Math.PI) * 1 * 0.3;  // 1Hz steps
+            // --- UPDATED MATH FOR 5Hz STEPS ---
+            // 1. Calculate raw change (0.5 is a sensitivity factor)
+            let rawChange = degrees * TUNING_STEP * 0.5;
             
-            if (Math.abs(freqDelta) > 0.1) {
-                state.currentFreq += Math.round(freqDelta);
+            // 2. Only update if the change is significant enough
+            if (Math.abs(rawChange) >= 1) {
+                // Round to integer to avoid decimal frequencies
+                state.currentFreq += Math.round(rawChange);
+                
                 updateBigDisplay(state.currentFreq);
                 sendFrequency(state.currentFreq);
             }
+
             state.tuningLastAngle = currentAngle;
         }
         state.tuningAnimationFrame = null;
     });
 }
-
 function stopTuningAdjust() {
     state.isTuningAdjusting = false;
     if (state.tuningAnimationFrame) {
@@ -1233,28 +1274,42 @@ function stopTuningAdjust() {
 
 function handleTuningWheel(e) {
     e.preventDefault();
-    const steps = e.deltaY > 0 ? -1 : 1;  // 1Hz steps
-    state.currentFreq += steps;
-    state.tuningKnobRotation += (steps / 1) * 2;  // Adjusted for 1Hz
+    const dir = e.deltaY > 0 ? -1 : 1;
+    
+    state.currentFreq += (dir * TUNING_STEP); // Uses 5Hz
+    
+    state.tuningKnobRotation += dir * 2;  
     els.tuningKnob.style.transform = `rotate(${state.tuningKnobRotation}deg)`;
-   updateBigDisplay(state.currentFreq);
+    
+    updateBigDisplay(state.currentFreq);
     sendFrequency(state.currentFreq);
 }
 
 function handleTuningKeyboard(e) {
-  if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
-    e.preventDefault();
-    state.currentFreq -= 1;  // 1Hz steps
-    state.currentVfoFreq = state.currentFreq;
-    updateBigDisplay(state.currentFreq, "--");
-    sendFrequency(state.currentFreq);
-} else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
-    e.preventDefault();
-    state.currentFreq += 1;  // 1Hz steps
-    state.currentVfoFreq = state.currentFreq;
-    updateBigDisplay(state.currentFreq, "--");
-    sendFrequency(state.currentFreq);
-}
+    if (!state.isHoveringTuningKnob) return;
+
+    let dir = 0; // Direction: -1 for down, 1 for up
+
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+        dir = -1;
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+        dir = 1;
+    }
+
+    if (dir !== 0) {
+        e.preventDefault();
+        
+        // --- UPDATED FREQUENCY CALCULATION ---
+        state.currentFreq += (dir * TUNING_STEP);
+        state.currentVfoFreq = state.currentFreq;
+
+        // Rotate knob: 2 degrees per "click" (independent of Hz step size)
+        state.tuningKnobRotation += dir * 2; 
+        els.tuningKnob.style.transform = `rotate(${state.tuningKnobRotation}deg)`;
+
+        updateBigDisplay(state.currentFreq, "--");
+        sendFrequency(state.currentFreq);
+    }
 }
 
 function enableTuningHoverKeys() {
@@ -1596,7 +1651,7 @@ els.dspSlider.addEventListener('input', (e) => {
         if (container && container.clientWidth > 0) {
             const w = container.clientWidth;
             els.spectrum.width = w;
-            els.spectrum.height = 140;
+            els.spectrum.height = 80;
             els.waterfall.width = w;
             // Use clientHeight if available and reasonable, otherwise fixed 150
             const wfHeight = els.waterfall.clientHeight;
