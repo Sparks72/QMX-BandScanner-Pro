@@ -4,7 +4,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=3.0, user-scalable=yes">
     <title>QMX BandScanner Pro (Enhanced Layout)</title>
     <style>
         :root {
@@ -20,19 +20,68 @@
             --section-bg: #1c2128;
         }
 
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            font-family: 'Segoe UI', 'Roboto', monospace;
-            margin: 0;
-            padding: 15px;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            box-sizing: border-box;
-            overflow: hidden;
-            cursor: default;
-        }
+
+/* --- RESPONSIVE ZOOM & SCALING --- */
+html {
+    /* Allow pinch-to-zoom on touch devices */
+    touch-action: manipulation;
+}
+
+/* Ensure all containers can shrink if needed */
+* {
+    min-width: 0;
+    min-height: 0;
+}
+
+/* Media query for smaller screens */
+@media (max-width: 768px) {
+    body {
+        padding: 10px;
+        font-size: 14px;
+    }
+    
+    .freq-readout {
+        font-size: 3rem !important; /* Smaller on mobile */
+    }
+    
+    .header-section {
+        grid-template-columns: 1fr; /* Stack vertically on mobile */
+    }
+    
+    .system-box {
+        min-width: unset;
+    }
+    
+    .ctrl-btn {
+        padding: 6px 10px;
+        font-size: 0.8rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .freq-readout {
+        font-size: 2rem !important; /* Even smaller on tiny screens */
+    }
+    
+    .tuning-knob-container {
+        width: 80px !important;
+        height: 80px !important;
+    }
+}
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: 'Segoe UI', 'Roboto', monospace;
+    margin: 0;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh; /* Changed from height to min-height */
+    box-sizing: border-box;
+    overflow-y: auto; /* Changed from hidden to auto */
+    overflow-x: hidden; /* Prevent horizontal scroll */
+    cursor: default;
+}
 
         /* --- TOOLTIP BUBBLE --- */
         #uiTooltip {
@@ -428,7 +477,11 @@
       /* Add or modify these styles: */
 
 .viz-container {
-    flex-grow: 1;
+       flex: 1 1 auto; /* Allow it to grow and shrink */
+   
+    overflow: visible; /* Don't cut off content */
+	
+	flex-grow: 1;
     display: flex;
     flex-direction: column;
     gap: 0px !important;      /* Force it with !important */
@@ -438,7 +491,7 @@
     border: 2px solid var(--border-color);
     border-radius: 8px;
     padding: 0px;              /* Remove all padding */
-    overflow: hidden;
+   /* overflow: hidden;*/
     box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
 }
 
@@ -524,6 +577,8 @@ canvas {
             opacity: 0.3;
             cursor: not-allowed;
         }
+		
+		
 		</style>
 </head>
 <body>
@@ -595,8 +650,8 @@ canvas {
                 <label>Amateur Band</label>
                 <select id="bandSelect" data-title="Choose HF Amateur Radio Band">
                     <option value="1800000,2000000">160m (1.8-2.0 MHz)</option>
+					<option value="3500000,4000000">80m (3.5-4.0 MHz)</option>
 					<option value="5351500,5366500">60m (5.3515-5.3665 MHz)</option>
-                    <option value="3500000,4000000">80m (3.5-4.0 MHz)</option>
 					<option value="7000000,7300000" selected>40m (7.0-7.3 MHz)</option>
                     <option value="10100000,10150000">30m (10.1-10.15 MHz)</option>
                     <option value="14000000,14350000">20m (14.0-14.35 MHz)</option>
@@ -921,90 +976,81 @@ canvas {
     }
 
   async function scanLoop() {
-        if (!state.isScanning) return;
-        if (state.scanPaused) {
-            setTimeout(scanLoop, 50);
-            return;
-        }
-
-        // 1. Check if we reached the end of the band for this pass
-        if (state.currentIndex >= state.scanData.length) {
-            
-            // DRAW FAST: Update the waterfall now!
-            drawWaterfall(); 
-            
-            // Speed Calculation
-            const now = Date.now();
-            const dur = (now - state.lastScanTime) / 1000;
-            if (dur > 0) {
-                // Approximate speed based on points scanned
-                const pointsScanned = Math.ceil(state.scanData.length / state.scanStride);
-                els.lblScanSpeed.innerText = Math.round(pointsScanned / dur) + " upd/s";
-            }
-            state.lastScanTime = now;
-
-            // INTERLACING LOGIC:
-            // Shift the offset. If we were doing 0, 4, 8... next we do 1, 5, 9...
-            state.passOffset++;
-            if (state.passOffset >= state.scanStride) {
-                state.passOffset = 0;
-            }
-            
-            // Start next pass at the new offset
-            state.currentIndex = state.passOffset;
-        }
-
-        // 2. Prepare the frequency
-        const freq = state.activeStart + (state.currentIndex * state.step);
-        
-        // Safety check for band limits
-        if (freq > state.activeEnd) {
-             // Force end of loop if calculation goes out of bounds
-             state.currentIndex = state.scanData.length + 1; 
-             scanLoop(); 
-             return;
-        }
-
-        const freqStr = freq.toString().padStart(11, '0');
-        
-        // 3. Send Command (The Bottleneck)
-        // We cannot optimize the speed of this line, but we run it fewer times per screen update
-        const rawData = await sendCommand(`FA${freqStr};SM`, true);
-        
-        // 4. Process Data
-        if (!rawData) {
-            state.timeoutCount++;
-            setTimeout(scanLoop, 10); // Slight backoff on error
-            return;
-        }
-
-        state.successCount++;
-        let smValue = processResponse(rawData);
-      if (smValue !== null) {
-    let dispDb = (smValue / 2) - 130;
-    state.scanData[state.currentIndex] = dispDb;
-    
-    // FIX: Update the main display immediately
-    updateBigDisplay(freq, Math.round(dispDb)); 
-}
-
-        // 5. Increment by STRIDE (Jump forward 4 steps instead of 1)
-        state.currentIndex += state.scanStride;
-
-        // 6. Fast Loop (Zero Latency Dwell)
-        if (state.isScanning) {
-            // If dwell is 0, we recurse immediately (micro-task) for max speed
-            if (state.dwellTime < 2) {
-                scanLoop();
-            } else {
-                setTimeout(scanLoop, state.dwellTime);
-            }
-        }
+    if (!state.isScanning) return;
+    if (state.scanPaused) {
+        setTimeout(scanLoop, 50);
+        return;
     }
 
+    // 1. Check if we reached the end of the band for this pass
+    if (state.currentIndex >= state.scanData.length) {
+        
+        // DRAW FAST: Update the waterfall now!
+        drawWaterfall(); 
+        
+        // Speed Calculation
+        const now = Date.now();
+        const dur = (now - state.lastScanTime) / 1000;
+        if (dur > 0) {
+            const pointsScanned = Math.ceil(state.scanData.length / state.scanStride);
+            els.lblScanSpeed.innerText = Math.round(pointsScanned / dur) + " upd/s";
+        }
+        state.lastScanTime = now;
 
+        // INTERLACING LOGIC
+        state.passOffset++;
+        if (state.passOffset >= state.scanStride) {
+            state.passOffset = 0;
+        }
+        
+        state.currentIndex = state.passOffset;
+    }
 
+    // 2. Prepare the frequency
+    const freq = state.activeStart + (state.currentIndex * state.step);
+    
+    // Safety check for band limits
+    if (freq > state.activeEnd) {
+         state.currentIndex = state.scanData.length + 1; 
+         scanLoop(); 
+         return;
+    }
 
+    const freqStr = freq.toString().padStart(11, '0');
+    
+    // 3. Send Command
+    const rawData = await sendCommand(`FA${freqStr};SM`, true);
+     console.log('Freq:',freqStr);
+    // 4. Process Data
+    if (!rawData) {
+        state.timeoutCount++;
+        setTimeout(scanLoop, 10);
+        return;
+    }
+
+    state.successCount++;
+    let smValue = processResponse(rawData);
+    
+    if (smValue !== null) {
+        let dispDb = (smValue / 2) - 130;
+        state.scanData[state.currentIndex] = dispDb;
+        
+        // Update the main display
+        updateBigDisplay(freq, Math.round(dispDb)); 
+    }
+
+    // 5. Increment by STRIDE
+    state.currentIndex += state.scanStride;
+
+    // 6. Fast Loop
+    if (state.isScanning) {
+        if (state.dwellTime < 2) {
+            scanLoop();
+        } else {
+            setTimeout(scanLoop, state.dwellTime);
+        }
+    }
+}
 
 
  // ==========================================
@@ -1410,16 +1456,60 @@ els.waterfall.style.marginLeft = sPercent + "%";
         }
     }
 
-    function updateBandLimits() {
+   async function updateBandLimits() {
+        // 1. Parse the new band limits from the dropdown value
         const parts = els.bandSelect.value.split(',');
         state.fullBandMin = parseInt(parts[0]);
         state.fullBandMax = parseInt(parts[1]);
+        
+        // 2. Reset the sliders to cover the full band
         els.startSlider.value = 0;
         els.endSlider.value = 100;
+        
+        // 3. Update the internal variables and text displays
         handleRangeInput();
+
+        // 4. --- NEW: COMMAND THE RADIO TO TUNE IMMEDIATELY ---
+        if (state.isConnected && !state.isScanning) {
+            
+            // Sync internal state to the start of the new band
+            state.currentVfoFreq = state.fullBandMin;
+            state.currentFreq = state.fullBandMin; 
+
+            // Update the screen display
+            updateBigDisplay(state.currentVfoFreq, "--");
+
+            // Send the command to the QMX
+            const freqStr = state.currentVfoFreq.toString().padStart(11, '0');
+           
+			await sendCommand(`FA${freqStr}`, false); 
+        }
     }
 
-    els.bandSelect.addEventListener('change', updateBandLimits);
+   
+
+// Check if radio supports the selected band
+async function validateBand() {
+    if (!state.isConnected) return true;
+    
+    // Test if radio accepts the frequency
+    const testFreq = state.fullBandMin;
+    const freqStr = testFreq.toString().padStart(11, '0');
+    const response = await sendCommand(`FA${freqStr}`, true);
+    
+    if (!response || response === "TIMEOUT") {
+        alert(`Warning: Radio may not support this band (${(testFreq/1000000).toFixed(3)} MHz). Check QMX band modules.`);
+        return false;
+    }
+    return true;
+}
+
+
+
+   els.bandSelect.addEventListener('change', async () => {
+    await updateBandLimits();
+    await validateBand(); // Add validation
+});
     els.startSlider.addEventListener('input', handleRangeInput);
     els.endSlider.addEventListener('input', handleRangeInput);
     els.wfFloorSlider.addEventListener('input', (e) => {
